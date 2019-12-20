@@ -1,4 +1,4 @@
-_addon.version = '0.0.1'
+_addon.version = '0.0.2'
 _addon.name = 'attackwithme'
 _addon.author = 'yyoshisaur'
 _addon.commands = {'attackwithme','atkwm'}
@@ -6,7 +6,7 @@ _addon.commands = {'attackwithme','atkwm'}
 require('logger')
 require('chat')
 
-packets = require('packets')
+local packets = require('packets')
 
 local help_text = [[
 attack with me Commands
@@ -16,6 +16,11 @@ attack with me Commands
 
 local is_master = false
 local is_slave = false
+
+local player_status = {
+    ['Idle'] = 0,
+    ['Engaged'] = 1,
+}
 
 local function attack_on(id)
     local target = windower.ffxi.get_mob_by_id(id)
@@ -55,6 +60,33 @@ local function attack_off()
     log('Slave: Attack Off')
 end
 
+local function change_target(id)
+    local target = windower.ffxi.get_mob_by_id(id)
+    local player = windower.ffxi.get_player()
+
+    if not target or not player then
+        -- error
+        return
+    end
+
+    local p = packets.new('incoming', 0x058, {
+        ['Player'] = player.id,
+        ['Target'] = target.id,
+        ['Player Index'] = player.index,
+    })
+
+    packets.inject(p)
+
+    log('Slave: Change Target ---> '..target.name)
+end
+
+local function target_lock_on()
+    local player = windower.ffxi.get_player()
+    if player and not player.target_locked then
+        windower.send_command('setkey h down;wait 0.5;setkey h up;')
+    end
+end
+
 local function set_bool_color(bool)
     local bool_str = tostring(bool)
     if bool then
@@ -75,12 +107,51 @@ windower.register_event('ipc message', function(message)
     if msg[1] == 'attack' then
         if msg[2] == 'on' then
             local id = tonumber(msg[3])
+            local target = windower.ffxi.get_mob_by_id(id)
+
+            if not target then
+                log('Slave: Target not found!')
+            end
+
+            if math.sqrt(target.distance) > 29 then
+                log('Slave: ['..target.name..']'..' found, buf too far!')
+                return
+            end
+
             attack_on(id)
+            target_lock_on:schedule(1)
         elseif msg[2] == 'off' then
             attack_off()
         end
+    elseif msg[1] == 'change' then
+        local id = tonumber(msg[2])
+        local target = windower.ffxi.get_mob_by_id(id)
+        local player = windower.ffxi.get_player()
+
+        if not target then
+            log('Slave: Target not found!')
+        end
+
+        change_target(id)
+
+        if math.sqrt(target.distance) > 29 then
+            log('Slave: ['..target.name..']'..' found, buf too far!')
+            return
+        end
+
+        while player.status == player_status['Idle'] do
+            attack_on(id)
+            coroutine.sleep(1)
+            player = windower.ffxi.get_player()
+        end
+
+        target_lock_on:schedule(1)
     end
 end)
+
+function send_ipc_message_delay(msg)
+    windower.send_ipc_message(msg)
+end
 
 windower.register_event('outgoing chunk', function(id, original, modified, injected, blocked)
     if not is_master then
@@ -90,12 +161,24 @@ windower.register_event('outgoing chunk', function(id, original, modified, injec
     if id == 0x01A then
         local p = packets.parse('outgoing', original)
         if p['Category'] == 0x02 then
-            windower.send_ipc_message('attack on '..tostring(p['Target']))
+            -- send_ipc_message_delay:schedule(1, 'attack on '..tostring(p['Target']))
             log('Master: Attack On')
         elseif p['Category'] == 0x04 then
             windower.send_ipc_message('attack off')
             log('Master: Attack Off')
         end
+    end
+end)
+
+windower.register_event('incoming chunk', function(id, original, modified, injected, blocked)
+    if not is_master then
+        return
+    end
+
+    if id == 0x058 then
+        local p = packets.parse('incoming', original)
+        send_ipc_message_delay:schedule(1, 'change '..tostring(p['Target']))
+        log('Master: Change Target')
     end
 end)
 
@@ -131,7 +214,7 @@ windower.register_event('addon command', function(...)
         end
         log('Master: '..set_bool_color(is_master), 'Slave: '..set_bool_color(is_slave))
     else
-        --error
+        -- error
         log(help_text)
     end
 end)
