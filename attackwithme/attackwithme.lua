@@ -111,6 +111,7 @@ windower.register_event('ipc message', function(message)
 
             if not target then
                 log('Slave: Target not found!')
+                return
             end
 
             if math.sqrt(target.distance) > 29 then
@@ -130,6 +131,7 @@ windower.register_event('ipc message', function(message)
 
         if not target then
             log('Slave: Target not found!')
+            return
         end
 
         change_target(id)
@@ -211,6 +213,7 @@ windower.register_event('addon command', function(...)
         else
             -- error
             log(help_text)
+            return
         end
         log('Master: '..set_bool_color(is_master), 'Slave: '..set_bool_color(is_slave))
     else
