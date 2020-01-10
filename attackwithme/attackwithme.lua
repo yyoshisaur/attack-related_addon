@@ -83,7 +83,7 @@ end
 local function target_lock_on()
     local player = windower.ffxi.get_player()
     if player and not player.target_locked then
-        windower.send_command('setkey h down;wait 0.5;setkey h up;')
+        windower.send_command('input /lockon')
     end
 end
 
@@ -226,7 +226,7 @@ windower.register_event('addon command', function(...)
     elseif mode == 'follow' or mode == 'f' then
         if is_master then
             local id = windower.ffxi.get_player().id
-            send_ipc_message('follow '..id)
+            windower.send_ipc_message('follow '..id)
         end
     else
         -- error
