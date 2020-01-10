@@ -1,4 +1,4 @@
-_addon.version = '0.0.2'
+_addon.version = '0.0.3'
 _addon.name = 'attackwithme'
 _addon.author = 'yyoshisaur'
 _addon.commands = {'attackwithme','atkwm'}
@@ -148,6 +148,13 @@ windower.register_event('ipc message', function(message)
         end
 
         target_lock_on:schedule(1)
+    elseif msg[1] == 'follow' then
+        local id = msg[2]
+        local mob = windower.ffxi.get_mob_by_id(id)
+        if mob then
+            local index = mob.index
+            windower.ffxi.follow(index)
+        end
     end
 end)
 
@@ -216,6 +223,11 @@ windower.register_event('addon command', function(...)
             return
         end
         log('Master: '..set_bool_color(is_master), 'Slave: '..set_bool_color(is_slave))
+    elseif mode == 'follow' or mode == 'f' then
+        if is_master then
+            local id = windower.ffxi.get_player().id
+            send_ipc_message('follow '..id)
+        end
     else
         -- error
         log(help_text)
