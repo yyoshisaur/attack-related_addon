@@ -1,4 +1,4 @@
-_addon.version = '0.0.3'
+_addon.version = '0.0.4'
 _addon.name = 'attackwithme'
 _addon.author = 'yyoshisaur'
 _addon.commands = {'attackwithme','atkwm'}
@@ -21,6 +21,8 @@ local player_status = {
     ['Idle'] = 0,
     ['Engaged'] = 1,
 }
+
+local max_retry = 5
 
 local function attack_on(id)
     local target = windower.ffxi.get_mob_by_id(id)
@@ -141,10 +143,12 @@ windower.register_event('ipc message', function(message)
             return
         end
 
-        while player.status == player_status['Idle'] do
+        local retry_count = 0
+        while player.status == player_status['Idle'] and retry_count < max_retry do
             attack_on(id)
             coroutine.sleep(1)
             player = windower.ffxi.get_player()
+            retry_count = retry_count + 1
         end
 
         target_lock_on:schedule(1)
