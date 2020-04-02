@@ -1,4 +1,4 @@
-_addon.version = '0.0.4'
+_addon.version = '0.0.5'
 _addon.name = 'attackwithme'
 _addon.author = 'yyoshisaur'
 _addon.commands = {'attackwithme','atkwm'}
@@ -136,20 +136,36 @@ windower.register_event('ipc message', function(message)
             return
         end
 
-        change_target(id)
+        local retry_count = 0
+        repeat
+            change_target(id)
+            coroutine.sleep(2)
+            local t = windower.ffxi.get_mob_by_target('t')
+            if t then
+                target = t
+            end
+            retry_count = retry_count + 1
+        until target.id == id or retry_count > max_retry
 
-        if math.sqrt(target.distance) > 29 then
+        if retry_count > max_retry then
+            log('Slave: can not change targe.')
+            return 
+        elseif math.sqrt(target.distance) > 29 then
             log('Slave: ['..target.name..']'..' found, buf too far!')
             return
         end
-
-        local retry_count = 0
-        while player.status == player_status['Idle'] and retry_count < max_retry do
+        
+        retry_count = 0
+        repeat
             attack_on(id)
-            coroutine.sleep(1)
+            coroutine.sleep(2)
+            local t = windower.ffxi.get_mob_by_target('t')
+            if t then
+                target = t
+            end
             player = windower.ffxi.get_player()
             retry_count = retry_count + 1
-        end
+        until player.status == player_status['Engaged'] or retry_count > max_retry
 
         target_lock_on:schedule(1)
     elseif msg[1] == 'follow' then
