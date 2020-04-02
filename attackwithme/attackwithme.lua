@@ -82,6 +82,25 @@ local function change_target(id)
     log('Slave: Change Target ---> '..target.name)
 end
 
+local function switch_target(id)
+    local target = windower.ffxi.get_mob_by_id(id)
+
+    if not target then
+        -- error
+        return
+    end
+
+    local p = packets.new('outgoing', 0x01A, {
+        ["Target"] = target.id,
+        ["Target Index"] = target.index,
+        ["Category"] = 0x0F -- Switch target
+    })
+
+    packets.inject(p)
+
+    log('Slave: Attack ---> '..target.name)
+end
+
 local function target_lock_on()
     local player = windower.ffxi.get_player()
     if player and not player.target_locked then
@@ -138,31 +157,8 @@ windower.register_event('ipc message', function(message)
 
         local retry_count = 0
         repeat
-            change_target(id)
+            switch_target(id)
             coroutine.sleep(2)
-            local t = windower.ffxi.get_mob_by_target('t')
-            if t then
-                target = t
-            end
-            retry_count = retry_count + 1
-        until target.id == id or retry_count > max_retry
-
-        if retry_count > max_retry then
-            log('Slave: can not change targe.')
-            return 
-        elseif math.sqrt(target.distance) > 29 then
-            log('Slave: ['..target.name..']'..' found, buf too far!')
-            return
-        end
-        
-        retry_count = 0
-        repeat
-            attack_on(id)
-            coroutine.sleep(2)
-            local t = windower.ffxi.get_mob_by_target('t')
-            if t then
-                target = t
-            end
             player = windower.ffxi.get_player()
             retry_count = retry_count + 1
         until player.status == player_status['Engaged'] or retry_count > max_retry
