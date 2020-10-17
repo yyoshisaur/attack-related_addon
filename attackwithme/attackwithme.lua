@@ -1,4 +1,4 @@
-_addon.version = '0.0.5'
+_addon.version = '0.0.6'
 _addon.name = 'attackwithme'
 _addon.author = 'yyoshisaur'
 _addon.commands = {'attackwithme','atkwm'}
