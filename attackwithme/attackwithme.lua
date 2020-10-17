@@ -186,7 +186,7 @@ windower.register_event('outgoing chunk', function(id, original, modified, injec
     if id == 0x01A then
         local p = packets.parse('outgoing', original)
         if p['Category'] == 0x02 then
-            -- send_ipc_message_delay:schedule(1, 'attack on '..tostring(p['Target']))
+            send_ipc_message_delay:schedule(1, 'attack on '..tostring(p['Target']))
             log('Master: Attack On')
         elseif p['Category'] == 0x04 then
             windower.send_ipc_message('attack off')
