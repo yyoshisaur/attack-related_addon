@@ -201,9 +201,12 @@ windower.register_event('incoming chunk', function(id, original, modified, injec
     end
 
     if id == 0x058 then
-        local p = packets.parse('incoming', original)
-        send_ipc_message_delay:schedule(1, 'change '..tostring(p['Target']))
-        log('Master: Change Target')
+        local player = windower.ffxi.get_player()
+        if player.status == player_status['Engaged'] then
+            local p = packets.parse('incoming', original)
+            send_ipc_message_delay:schedule(1, 'change '..tostring(p['Target']))
+            log('Master: Change Target')
+        end
     end
 end)
 
