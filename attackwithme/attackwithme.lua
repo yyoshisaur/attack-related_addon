@@ -24,6 +24,11 @@ local player_status = {
 
 local max_retry = 5
 
+local approach_distance = {
+    ['melee'] = 2,
+    ['range'] = 21
+}
+
 local function attack_on(id)
     local target = windower.ffxi.get_mob_by_id(id)
 
@@ -108,6 +113,48 @@ local function target_lock_on()
     end
 end
 
+local function face_to(target_index)
+    local player = windower.ffxi.get_mob_by_id(windower.ffxi.get_player().id)
+    local target = windower.ffxi.get_mob_by_index(target_index)
+    local angle = (math.atan2((target.y - player.y), (target.x - player.x))*180/math.pi)*-1
+    windower.ffxi.turn((angle):radian())
+end
+
+local function approach(target_index, distance)
+    local function target_distance(target_index)
+        local target = windower.ffxi.get_mob_by_index(target_index)
+        if target == nil then
+            return 0
+        end
+        
+        return target.distance:sqrt()
+    end
+
+    local function run_to(target_index, distance, retry_count)
+        if retry_count > 100 then
+            windower.ffxi.run(false)
+            return
+        end
+
+        if target_distance(target_index) < distance then
+            windower.ffxi.run(false)
+            face_to(target_index)
+            return
+        end
+
+        local player = windower.ffxi.get_mob_by_id(windower.ffxi.get_player().id)
+        local target = windower.ffxi.get_mob_by_index(target_index)
+
+        local angle = (math.atan2((target.y - player.y), (target.x - player.x))*180/math.pi)*-1
+        windower.ffxi.run((angle):radian())
+
+        coroutine.schedule(function()
+            run_to(target_index, distance, retry_count + 1)
+        end, 0.1)
+    end
+    run_to(target_index, distance, 0)
+end
+
 local function set_bool_color(bool)
     local bool_str = tostring(bool)
     if bool then
@@ -140,8 +187,11 @@ windower.register_event('ipc message', function(message)
                 return
             end
 
+            windower.ffxi.follow()
             attack_on(id)
             target_lock_on:schedule(1)
+            approach:schedule(2, target.index, approach_distance.melee)
+
         elseif msg[2] == 'off' then
             attack_off()
         end
@@ -164,6 +214,7 @@ windower.register_event('ipc message', function(message)
         until player.status == player_status['Engaged'] or retry_count > max_retry
 
         target_lock_on:schedule(1)
+        approach:schedule(0, target.index, approach_distance.melee)
     elseif msg[1] == 'follow' then
         local id = msg[2]
         local mob = windower.ffxi.get_mob_by_id(id)
