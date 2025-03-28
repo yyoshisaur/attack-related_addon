@@ -253,6 +253,13 @@ windower.register_event('ipc message', function(message)
         end
 
     elseif msg[1] == 'follow' then
+        local id = tonumber(msg[2])
+        local mob = windower.ffxi.get_mob_by_id(id)
+        if mob then
+            local index = mob.index
+            windower.ffxi.follow(index)
+        end
+    elseif msg[1] == 'refollow' then
         if not is_slave_refollow then
             return
         end
@@ -321,11 +328,11 @@ windower.register_event('status change', function(new, old)
     if is_idle(new) and is_engaged(old) then
         if is_master then
             local player = windower.ffxi.get_player()
-            send_ipc_message_delay:schedule(1, 'follow %d':format(player.id))
+            send_ipc_message_delay:schedule(1, 'refollow %d':format(player.id))
         elseif is_slave then
             if is_slave_refollow and master_id then
                 local master = windower.ffxi.get_mob_by_id(master_id)
-                send_ipc_message_delay:schedule(1, 'follow %d':format(master.id))
+                send_ipc_message_delay:schedule(1, 'refollow %d':format(master.id))
             end
         end
     elseif is_engaged(new) and is_idle(old) then
