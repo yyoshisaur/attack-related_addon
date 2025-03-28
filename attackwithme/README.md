@@ -21,4 +21,15 @@ Aの戦闘開始に同期してBも戦闘開始する設定(Cは同期させな�
 
         //atkwm slave off
 
+戦闘開始後、近づく
+
+        //atkwm approach on
+        //atkwm approach off
+
+戦闘終了後、再フォロー
+
+        //atkwm refollow on
+        //atkwm refollow off
+
+
 /attackoff(戦闘解除)も同期する

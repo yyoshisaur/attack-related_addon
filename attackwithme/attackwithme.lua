@@ -1,4 +1,4 @@
-_addon.version = '0.0.6'
+_addon.version = '0.0.7'
 _addon.name = 'attackwithme'
 _addon.author = 'yyoshisaur'
 _addon.commands = {'attackwithme','atkwm'}
@@ -14,14 +14,17 @@ attack with me Commands
 //atkwm slave on
 //atkwm slave off]]
 
+local master_id = nil
 local is_master = false
 local is_slave = false
+local is_slave_approach = false
+local is_slave_refollow = false
 
 local player_status = {
     ['Idle'] = 0,
     ['Engaged'] = 1,
 }
-
+local dead_status = S{2,3}
 local max_retry = 5
 
 local approach_distance = {
@@ -113,6 +116,10 @@ local function target_lock_on()
     end
 end
 
+local function unfollow()
+    windower.send_command('setkey numpad7 down;wait .5;setkey numpad7 up;')
+end
+
 local function face_to(target_index)
     local player = windower.ffxi.get_mob_by_id(windower.ffxi.get_player().id)
     local target = windower.ffxi.get_mob_by_index(target_index)
@@ -131,7 +138,7 @@ local function approach(target_index, distance)
     end
 
     local function run_to(target_index, distance, retry_count)
-        if retry_count > 100 then
+        if retry_count > 25 then
             windower.ffxi.run(false)
             return
         end
@@ -145,14 +152,33 @@ local function approach(target_index, distance)
         local player = windower.ffxi.get_mob_by_id(windower.ffxi.get_player().id)
         local target = windower.ffxi.get_mob_by_index(target_index)
 
+        if dead_status:contains(target.status) then
+            windower.ffxi.run(false)
+            return
+        end
+
         local angle = (math.atan2((target.y - player.y), (target.x - player.x))*180/math.pi)*-1
         windower.ffxi.run((angle):radian())
 
         coroutine.schedule(function()
             run_to(target_index, distance, retry_count + 1)
-        end, 0.1)
+        end, 0.5)
     end
     run_to(target_index, distance, 0)
+end
+
+local function is_engaged(status)
+    if status == player_status['Engaged'] then
+        return true
+    end
+    return false
+end
+
+local function is_idle(status)
+    if status == player_status['Idle'] then
+        return true
+    end
+    return false
 end
 
 local function set_bool_color(bool)
@@ -175,6 +201,7 @@ windower.register_event('ipc message', function(message)
     if msg[1] == 'attack' then
         if msg[2] == 'on' then
             local id = tonumber(msg[3])
+            local player = windower.ffxi.get_player()
             local target = windower.ffxi.get_mob_by_id(id)
 
             if not target then
@@ -187,10 +214,16 @@ windower.register_event('ipc message', function(message)
                 return
             end
 
-            windower.ffxi.follow()
-            attack_on(id)
+            unfollow()
+
+            if not is_engaged(player.status) then
+                attack_on(id)
+            end
+
             target_lock_on:schedule(1)
-            approach:schedule(2, target.index, approach_distance.melee)
+            if is_slave_approach then
+                approach:schedule(1, target.index, approach_distance.melee)
+            end
 
         elseif msg[2] == 'off' then
             attack_off()
@@ -211,17 +244,26 @@ windower.register_event('ipc message', function(message)
             coroutine.sleep(2)
             player = windower.ffxi.get_player()
             retry_count = retry_count + 1
-        until player.status == player_status['Engaged'] or retry_count > max_retry
+        until is_engaged(player.status) or retry_count > max_retry
 
         target_lock_on:schedule(1)
-        approach:schedule(0, target.index, approach_distance.melee)
+
+        if is_slave_approach then
+            approach:schedule(0, target.index, approach_distance.melee)
+        end
+
     elseif msg[1] == 'follow' then
-        local id = msg[2]
+        if not is_slave_refollow then
+            return
+        end
+        local id = tonumber(msg[2])
         local mob = windower.ffxi.get_mob_by_id(id)
         if mob then
             local index = mob.index
             windower.ffxi.follow(index)
         end
+    elseif msg[1] == 'master_id' then
+        master_id = tonumber(msg[2])
     end
 end)
 
@@ -237,8 +279,11 @@ windower.register_event('outgoing chunk', function(id, original, modified, injec
     if id == 0x01A then
         local p = packets.parse('outgoing', original)
         if p['Category'] == 0x02 then
-            send_ipc_message_delay:schedule(1, 'attack on '..tostring(p['Target']))
+            send_ipc_message_delay:schedule(1, 'attack on %d':format(p['Target']))
             log('Master: Attack On')
+        elseif p['Category'] == 0x0F then
+            send_ipc_message_delay:schedule(1, 'attack on %d':format(p['Target']))
+            log('Master: Switch Target')
         elseif p['Category'] == 0x04 then
             windower.send_ipc_message('attack off')
             log('Master: Attack Off')
@@ -247,21 +292,56 @@ windower.register_event('outgoing chunk', function(id, original, modified, injec
 end)
 
 windower.register_event('incoming chunk', function(id, original, modified, injected, blocked)
-    if not is_master then
-        return
+    if is_master then
+        if id == 0x058 then
+            local player = windower.ffxi.get_player()
+            if is_engaged(player.status) then
+                local p = packets.parse('incoming', original)
+                if p['Target'] > 0 then
+                    send_ipc_message_delay:schedule(1, 'change %d':format(p['Target']))
+                    log('Master: Change Target')
+                end
+            end
+        end
+    elseif is_slave then
+        if id == 0x00E then
+            local player = windower.ffxi.get_player()
+            if is_engaged(player.status) then
+                local target = windower.ffxi.get_mob_by_target('t')
+                local p = packets.parse('incoming', original)
+                if is_slave_approach and target and target.id == p['NPC'] then
+                    approach:schedule(0, target.index, approach_distance.melee)
+                end
+            end
+        end
     end
+end)
 
-    if id == 0x058 then
-        local player = windower.ffxi.get_player()
-        if player.status == player_status['Engaged'] then
-            local p = packets.parse('incoming', original)
-            send_ipc_message_delay:schedule(1, 'change '..tostring(p['Target']))
-            log('Master: Change Target')
+windower.register_event('status change', function(new, old)
+    if is_idle(new) and is_engaged(old) then
+        if is_master then
+            local player = windower.ffxi.get_player()
+            send_ipc_message_delay:schedule(1, 'follow %d':format(player.id))
+        elseif is_slave then
+            if is_slave_refollow and master_id then
+                local master = windower.ffxi.get_mob_by_id(master_id)
+                send_ipc_message_delay:schedule(1, 'follow %d':format(master.id))
+            end
+        end
+    elseif is_engaged(new) and is_idle(old) then
+        if is_master then
+            local player = windower.ffxi.get_player()
+            windower.send_ipc_message('master_id %d':format(player.id))
         end
     end
 end)
 
 windower.register_event('addon command', function(...)
+    local function settings_disp()
+        log('Master: %s':format(set_bool_color(is_master)))
+        log('Slave: %s [Approach: %s Refollow: %s]':format(set_bool_color(is_slave), set_bool_color(is_slave_approach), set_bool_color(is_slave_refollow)))
+    end
+
     local args = {...}
 
     if not args[1] then
@@ -274,7 +354,7 @@ windower.register_event('addon command', function(...)
     if mode == 'master' then
         is_master = true
         is_slave = false
-        log('Master: '..set_bool_color(is_master), 'Slave: '..set_bool_color(is_slave))
+        settings_disp()
     elseif mode == 'slave' then
         if not args[2] then
             return
@@ -292,11 +372,31 @@ windower.register_event('addon command', function(...)
             log(help_text)
             return
         end
-        log('Master: '..set_bool_color(is_master), 'Slave: '..set_bool_color(is_slave))
+        settings_disp()
+    elseif mode == 'approach' or mode == 'apr' then
+        if is_slave then
+            local mode = args[2]
+            if mode == 'on' then
+                is_slave_approach = true
+            elseif mode == 'off' then
+                is_slave_approach = false
+            end
+        end
+        settings_disp()
+    elseif mode == 'refollow' or mode == 'rf' then
+        if is_slave then
+            local mode = args[2]
+            if mode == 'on' then
+                is_slave_refollow = true
+            elseif mode == 'off' then
+                is_slave_refollow = false
+            end 
+        end
+        settings_disp()
     elseif mode == 'follow' or mode == 'f' then
         if is_master then
             local id = windower.ffxi.get_player().id
-            windower.send_ipc_message('follow '..id)
+            windower.send_ipc_message('follow %d':format(id))
         end
     else
         -- error
