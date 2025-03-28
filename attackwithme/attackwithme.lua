@@ -21,9 +21,10 @@ local is_slave = false
 local is_slave_approach = false
 local is_slave_refollow = false
 
-local player_status = {
-    ['Idle'] = 0,
-    ['Engaged'] = 1,
+local mob_status = {
+    ['Idle'] = S{0},
+    ['Engaged'] = S{1},
+    ['Dead'] = S{2,3}
 }
 local dead_status = S{2,3}
 local max_retry = 5
@@ -32,6 +33,27 @@ local approach_distance = {
     ['melee'] = 2,
     ['range'] = 21
 }
+
+local function is_engaged(status)
+    if mob_status['Engaged']:contains(status) then
+        return true
+    end
+    return false
+end
+
+local function is_idle(status)
+    if mob_status['Idle']:contains(status) then
+        return true
+    end
+    return false
+end
+
+local function is_dead(status)
+    if mob_status['Dead']:contains(status) then
+        return true
+    end
+    return false
+end
 
 local function attack_on(id)
     local target = windower.ffxi.get_mob_by_id(id)
@@ -153,7 +175,7 @@ local function approach(target_index, distance)
         local player = windower.ffxi.get_mob_by_id(windower.ffxi.get_player().id)
         local target = windower.ffxi.get_mob_by_index(target_index)
 
-        if dead_status:contains(target.status) then
+        if is_dead(target.status) then
             windower.ffxi.run(false)
             return
         end
@@ -166,20 +188,6 @@ local function approach(target_index, distance)
         end, 0.5)
     end
     run_to(target_index, distance, 0)
-end
-
-local function is_engaged(status)
-    if status == player_status['Engaged'] then
-        return true
-    end
-    return false
-end
-
-local function is_idle(status)
-    if status == player_status['Idle'] then
-        return true
-    end
-    return false
 end
 
 local function set_bool_color(bool)
