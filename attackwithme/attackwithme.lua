@@ -11,8 +11,9 @@ local packets = require('packets')
 local help_text = [[
 attack with me Commands
 //atkwm master
-//atkwm slave on
-//atkwm slave off]]
+//atkwm slave <on/off>
+//atkwm approach <on/off>
+//atkwm refollow <on/off>]]
 
 local master_id = nil
 local is_master = false
